@@ -7,7 +7,7 @@ A Rust command-line tool that automates the Manticore/Yosys frontend and generat
 
 ## Overview
 
-This tool collects one or more Verilog/SystemVerilog file paths, runs the existing `v2masmyosys` frontend, and generates a `main.masm` netlist assembly file.
+This tool takes one or more Verilog/SystemVerilog files as command-line arguments, runs the existing `v2masmyosys` frontend, and generates a `main.masm` netlist assembly file.
 
 ```text
 Verilog/SystemVerilog → Rust tool → v2masmyosys → main.masm
@@ -17,12 +17,14 @@ The existing Manticore/Yosys frontend is reused. This project focuses on automat
 
 ## Features
 
-- Accepts one or more Verilog/SystemVerilog files
-- Validates entered file paths
-- Runs the Manticore/Yosys frontend automatically
+- Accepts one or more Verilog/SystemVerilog files as arguments
+- Checks that every input file exists before running anything
+- Finds the frontend through an environment variable or your `PATH`, with no hardcoded paths
+- Runs the frontend in the current directory, or in a directory you choose with `--working-dir`
 - Executes the required Yosys and Manticore passes
 - Generates `main.masm`
-- Displays frontend output and errors
+- Shows the frontend's output live in the terminal
+- Exits with a non-zero code on failure, so it can be used in scripts
 
 ## Requirements
 
@@ -35,8 +37,8 @@ The existing Manticore/Yosys frontend is reused. This project focuses on automat
 Clone the repository:
 
 ```bash
-git clone https://github.com/hannahkarian/manticore-verilog-to-masm.git
-cd manticore-verilog-to-masm
+git clone https://github.com/hannahkarian/hana-manticore.git
+cd hana-manticore
 ```
 
 Build the project:
@@ -47,44 +49,65 @@ cargo build
 
 ## Configuration
 
-The path to `v2masmyosys` is currently configured in `src/main.rs`:
+The tool needs to know where `v2masmyosys` is. This is a one-time setup on each machine, and you can do it in either of two ways.
 
-```rust
-let frontend_binary =
-    Path::new("/home/hana/projects/hana-internship/manticore-frontend/v2masmyosys");
+### Option 1: Set `MANTICORE_YOSYS_FRONTEND` (recommended)
 
-let frontend_directory =
-    Path::new("/home/hana/projects/hana-internship/manticore-frontend");
+Add this line to the end of your `~/.bashrc` (or `~/.zshrc` if you use zsh), using the path to your own copy of the frontend:
+
+```bash
+export MANTICORE_YOSYS_FRONTEND=/path/to/manticore-frontend/v2masmyosys
 ```
 
-Update these paths if the Manticore frontend is located somewhere else.
+Then open a new terminal, or run `source ~/.bashrc`. Check that it worked:
+
+```bash
+echo $MANTICORE_YOSYS_FRONTEND
+```
+
+### Option 2: Put `v2masmyosys` on your `PATH`
+
+If the variable is not set, the tool runs `v2masmyosys` by name and lets the system find it on your `PATH`. Add the frontend's folder to your `PATH` in `~/.bashrc`:
+
+```bash
+export PATH="$PATH:/path/to/manticore-frontend"
+```
+
+Check that it worked:
+
+```bash
+which v2masmyosys
+```
+
+There is no need to copy `v2masmyosys` into this project. Leaving it where it was built also keeps any support files it relies on next to it.
 
 ## Usage
 
-Run the program:
+```text
+hana-manticore [--working-dir DIR] FILE.v [FILE.v ...]
+```
+
+With Cargo, arguments for the program go after `--`:
 
 ```bash
-cargo run
+cargo run -- top.sv counter.sv
 ```
 
-Enter one Verilog/SystemVerilog path per line:
+All files are passed to Yosys together as one design. The frontend runs in the current directory, so `main.masm` is created there:
 
 ```text
-Enter the path of each Verilog file.
-Press Enter on an empty line when finished.
-/path/to/top.sv
-/path/to/counter.sv
+Created: /home/you/my-design/main.masm
+You can now parse this file:
+/home/you/my-design/main.masm
 ```
 
-After entering all files, press Enter on an empty line.
+To create `main.masm` somewhere else, use `--working-dir`:
 
-The files are passed to Yosys together as one design.
-
-The generated output is:
-
-```text
-main.masm
+```bash
+cargo run -- --working-dir build/ top.sv counter.sv
 ```
+
+Relative input paths are always resolved from where you run the command, even when `--working-dir` points somewhere else.
 
 ## Compilation Pipeline
 
@@ -110,6 +133,30 @@ The tool performs the following steps:
     └── main.rs      # Main Rust program
 ```
 
+`src/main.rs` is split into small functions, each with one job:
+
+| Function | Purpose |
+| --- | --- |
+| `frontend_bin` | Returns `$MANTICORE_YOSYS_FRONTEND`, or `v2masmyosys` if it is not set |
+| `build_yosys_commands` | Builds the Yosys command string passed with `-p` |
+| `run_manticore_frontend` | Runs the frontend in the working directory and checks that `main.masm` was created |
+| `run` | Reads the command line arguments, checks that each file exists, makes the paths absolute and picks the working directory |
+| `main` | Calls `run`, prints the path of `main.masm`, and reports errors |
+
+## Troubleshooting
+
+**`could not start v2masmyosys: No such file or directory`**
+The tool cannot find the frontend. Follow the steps in [Configuration](#configuration), then open a new terminal.
+
+**`No Verilog files were provided.`**
+No input files were given. Pass at least one Verilog/SystemVerilog file after `cargo run --`.
+
+**`File does not exist: ...`**
+One of the input paths is wrong. Paths are relative to the directory you run the command from.
+
+**`The Manticore frontend failed.`**
+Yosys reported an error. Its output is printed just above this message.
+
 ## Development Commands
 
 Format the code:
@@ -127,7 +174,7 @@ cargo check
 Run the application:
 
 ```bash
-cargo run
+cargo run -- design.sv
 ```
 
 ## Generated Files
@@ -147,10 +194,6 @@ Completed:
 
 - Manticore/Yosys frontend setup
 - Rust integration using `std::process::Command`
-- Interactive Verilog/SystemVerilog file input
+- Command-line input of Verilog/SystemVerilog files
+- Configurable frontend location and working directory
 - Automated generation of `main.masm`
-
-
-## License
-
-No license has been selected for this repository yet.
