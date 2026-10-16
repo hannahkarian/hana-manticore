@@ -18,13 +18,12 @@ The existing Manticore/Yosys frontend is reused. This project focuses on automat
 ## Features
 
 - Accepts one or more Verilog/SystemVerilog files as arguments
-- Checks that every input file exists before running anything
+- Skips input files that do not exist, with a message
 - Finds the frontend through an environment variable or your `PATH`, with no hardcoded paths
 - Runs the frontend in the current directory, or in a directory you choose with `--working-dir`
 - Executes the required Yosys and Manticore passes
 - Generates `main.masm`
-- Shows the frontend's output live in the terminal
-- Exits with a non-zero code on failure, so it can be used in scripts
+- Prints the frontend's output and errors
 
 ## Requirements
 
@@ -96,18 +95,18 @@ cargo run -- top.sv counter.sv
 All files are passed to Yosys together as one design. The frontend runs in the current directory, so `main.masm` is created there:
 
 ```text
-Created: /home/you/my-design/main.masm
+Created: ./main.masm
 You can now parse this file:
-/home/you/my-design/main.masm
+./main.masm
 ```
 
 To create `main.masm` somewhere else, use `--working-dir`:
 
 ```bash
-cargo run -- --working-dir build/ top.sv counter.sv
+cargo run -- --working-dir /home/you/my-design/build /home/you/my-design/top.sv /home/you/my-design/counter.sv
 ```
 
-Relative input paths are always resolved from where you run the command, even when `--working-dir` points somewhere else.
+When you use `--working-dir`, give the Verilog files as absolute paths. The frontend runs inside the working directory, so a relative path like `top.sv` would be looked up there instead of where you ran the command.
 
 ## Compilation Pipeline
 
@@ -138,24 +137,10 @@ The tool performs the following steps:
 | Function | Purpose |
 | --- | --- |
 | `frontend_bin` | Returns `$MANTICORE_YOSYS_FRONTEND`, or `v2masmyosys` if it is not set |
-| `build_yosys_commands` | Builds the Yosys command string passed with `-p` |
-| `run_manticore_frontend` | Runs the frontend in the working directory and checks that `main.masm` was created |
-| `run` | Reads the command line arguments, checks that each file exists, makes the paths absolute and picks the working directory |
+| `run_manticore_frontend` | Builds the Yosys command, runs the frontend in the working directory and checks that `main.masm` was created |
+| `run` | Reads the Verilog files and `--working-dir` from the command line and skips files that do not exist |
 | `main` | Calls `run`, prints the path of `main.masm`, and reports errors |
 
-## Troubleshooting
-
-**`could not start v2masmyosys: No such file or directory`**
-The tool cannot find the frontend. Follow the steps in [Configuration](#configuration), then open a new terminal.
-
-**`No Verilog files were provided.`**
-No input files were given. Pass at least one Verilog/SystemVerilog file after `cargo run --`.
-
-**`File does not exist: ...`**
-One of the input paths is wrong. Paths are relative to the directory you run the command from.
-
-**`The Manticore frontend failed.`**
-Yosys reported an error. Its output is printed just above this message.
 
 ## Development Commands
 
@@ -197,3 +182,7 @@ Completed:
 - Command-line input of Verilog/SystemVerilog files
 - Configurable frontend location and working directory
 - Automated generation of `main.masm`
+
+## License
+
+No license has been selected for this repository yet.
